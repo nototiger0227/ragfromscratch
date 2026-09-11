@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from ingest import ingest_pdf, list_documents, get_document_chunks
+from ingest import ingest_document, list_documents, get_document_chunks
 from query import ask
 
 app = FastAPI(title="FinRAG")
@@ -33,14 +33,13 @@ DATA_DIR.mkdir(exist_ok=True)
 
 @app.post("/api/ingest")
 async def api_ingest(file: UploadFile, doc_id: str = Form(...)):
-    """Save the uploaded PDF, run it through the pipeline, return the
-    chunks that were created — this is the response the frontend uses
-    to render the chunk catalog."""
-    pdf_path = DATA_DIR / file.filename
-    with pdf_path.open("wb") as f:
+    """Save the uploaded document, run it through the pipeline, and return the created chunks."""
+    safe_name = file.filename or "uploaded_file"
+    file_path = DATA_DIR / safe_name
+    with file_path.open("wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    chunks = ingest_pdf(str(pdf_path), doc_id)
+    chunks = ingest_document(str(file_path), doc_id)
     return {"doc_id": doc_id, "chunk_count": len(chunks), "chunks": chunks}
 
 

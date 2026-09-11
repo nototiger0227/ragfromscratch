@@ -1,43 +1,82 @@
-"""
-Step 2 of indexing: split text into chunks small enough to embed
-meaningfully and retrieve precisely.
+"""Chunking utilities with section-aware and overlap-aware splitting."""
+import re
 
-WHY CHUNK AT ALL? Two reasons:
-1. Embedding models compress a passage into ONE fixed-size vector. Feed
-   in an entire 100-page report and the vector becomes a mushy average
-   of everything — useless for finding a specific fact. Feed in one
-   paragraph and the vector actually represents that paragraph's
-   meaning.
-2. LLM context windows are limited (and cost more per token) — you want
-   to retrieve only the few paragraphs that are actually relevant, not
-   the whole document.
-
-WHY OVERLAP CHUNKS? If a sentence explaining "Q3 revenue was $4.2B due
-to..." gets cut in half at a chunk boundary, the reason gets separated
-from the number. Overlap (repeating the last N characters of chunk i at
-the start of chunk i+1) reduces the odds that a key fact gets split
-across two chunks with neither having full context.
-
-This version chunks by raw character count, which is simple but naive
-— it can cut mid-sentence or mid-table-row. Stage 2 replaces this with
-smarter, structure-aware chunking (split on paragraph/section
-boundaries first, only falling back to hard cuts for oversized
-sections).
-"""
 from config import CHUNK_SIZE, CHUNK_OVERLAP
 
 
-def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
-    chunks = []
+def normalize_whitespace(text: str) -> str:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def split_into_sections(text: str) -> list[str]:
+    """Break large text into sections using blank lines and heading-like lines."""
+    lines = [line.rstrip() for line in text.split("\n")]
+    sections: list[str] = []
+    current: list[str] = []
+
+    def flush():
+        nonlocal current
+        block = "\n".join(part.strip() for part in current if part.strip())
+        if block:
+            sections.append(block)
+        current = []
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if current:
+                flush()
+            continue
+
+        is_heading = bool(re.match(r"^(#{1,6}\s+.+|[A-Z][A-Za-z0-9 ,&()/-]{2,}:?)$", stripped))
+        if is_heading and current:
+            flush()
+
+        current.append(stripped)
+
+    flush()
+    return sections
+
+
+def chunk_section(section: str, chunk_size: int, overlap: int) -> list[str]:
+    """Chunk a section while preserving overlap and avoiding oversized pieces."""
+    if len(section) <= chunk_size:
+        return [section.strip()]
+
+    chunks: list[str] = []
     start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunks.append(text[start:end])
-        start += chunk_size - overlap  # step forward less than chunk_size -> overlap
-    return [c.strip() for c in chunks if c.strip()]
+    while start < len(section):
+        end = min(start + chunk_size, len(section))
+        chunk = section[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+        if end == len(section):
+            break
+        start += max(1, chunk_size - overlap)
+
+    return chunks
+
+
+def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
+    """Section-aware chunking with a fallback to fixed-size chunks for oversized text."""
+    cleaned = normalize_whitespace(text)
+    if not cleaned:
+        return []
+
+    sections = split_into_sections(cleaned)
+    if not sections:
+        sections = [cleaned]
+
+    chunks: list[str] = []
+    for section in sections:
+        chunks.extend(chunk_section(section, chunk_size, overlap))
+
+    return [chunk.strip() for chunk in chunks if chunk.strip()]
 
 
 if __name__ == "__main__":
-    sample = "A" * 50 + " " + "B" * 50 + " " + "C" * 50
-    for i, c in enumerate(chunk_text(sample, chunk_size=60, overlap=20)):
-        print(f"chunk {i}: {c[:30]}... (len={len(c)})")
+    sample = "# Revenue\nThe company generated significant revenue in 2024.\n\n# Risk\nSupply chain interruptions remain a key concern."
+    for i, c in enumerate(chunk_text(sample, chunk_size=80, overlap=20)):
+        print(f"chunk {i}: {c[:60]}... (len={len(c)})")

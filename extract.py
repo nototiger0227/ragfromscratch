@@ -1,32 +1,49 @@
-"""
-Step 1 of indexing: turn a PDF into plain text.
+"""Document extraction utilities for PDFs, DOCX, and TXT files."""
+from pathlib import Path
 
-We use PyMuPDF (imported as `fitz`) because it's fast and handles most
-real-world PDFs well. It's NOT great at preserving table structure —
-that's a known weakness we'll address in Stage 2 with pymupdf4llm,
-which converts to Markdown and keeps tables intact. For now, plain
-text is enough to learn the pipeline.
-"""
-import pymupdf as fitz  # Updated import
+import pymupdf as fitz
+from docx import Document
 
 
-def extract_text(pdf_path: str) -> str:
+def extract_pdf_text(pdf_path: str) -> str:
     """Return the full text of a PDF as one big string, page by page."""
     doc = fitz.open(pdf_path)
     pages = []
     for page_num, page in enumerate(doc, start=1):
         text = page.get_text()
-        # Tagging each page's text with its page number now, while we
-        # still know it, means later we can tell the user "this answer
-        # came from page 12" instead of just dumping an answer with no
-        # source.
         pages.append(f"\n\n--- Page {page_num} ---\n\n{text}")
     doc.close()
     return "".join(pages)
 
 
+def extract_docx_text(docx_path: str) -> str:
+    """Return the text content from a DOCX file."""
+    document = Document(docx_path)
+    paragraphs = [p.text for p in document.paragraphs if p.text.strip()]
+    return "\n\n".join(paragraphs)
+
+
+def extract_txt_text(txt_path: str) -> str:
+    """Return the contents of a plain text file."""
+    return Path(txt_path).read_text(encoding="utf-8")
+
+
+def extract_text(file_path: str) -> str:
+    """Dispatch to the right parser based on the file extension."""
+    path = Path(file_path)
+    suffix = path.suffix.lower()
+
+    if suffix == ".pdf":
+        return extract_pdf_text(str(path))
+    if suffix == ".docx":
+        return extract_docx_text(str(path))
+    if suffix in {".txt", ".md", ".csv"}:
+        return extract_txt_text(str(path))
+
+    raise ValueError(f"Unsupported file type: {suffix}. Supported: PDF, DOCX, TXT")
+
+
 if __name__ == "__main__":
-    # Quick manual test: python extract.py data/sample.pdf
     import sys
     text = extract_text(sys.argv[1])
     print(text[:2000])
