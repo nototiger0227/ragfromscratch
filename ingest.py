@@ -43,6 +43,9 @@ def ingest_pdf(pdf_path: str, doc_id: str):
     doc_id: a short identifier for this document, e.g. "apple_2024".
     Used so we can later filter retrieval to one document, and so
     re-running ingestion on the same doc overwrites cleanly.
+
+    Returns the list of chunks that were stored, so callers (like the
+    web UI) can show exactly what got indexed without a second lookup.
     """
     print(f"[1/4] Extracting text from {pdf_path}...")
     text = extract_text(pdf_path)
@@ -51,11 +54,17 @@ def ingest_pdf(pdf_path: str, doc_id: str):
     chunks = chunk_text(text)
     print(f"      -> {len(chunks)} chunks")
 
-    print("[3/4] Embedding chunks (calls OpenAI API)...")
+    print("[3/4] Embedding chunks (calls Gemini API)...")
     vectors = embed_texts(chunks)
 
     print("[4/4] Storing in Chroma...")
     collection = chroma_client.get_or_create_collection(COLLECTION_NAME)
+    # If this doc_id was ingested before, clear its old chunks first so
+    # re-ingesting doesn't leave stale duplicates sitting in the store.
+    existing = collection.get(where={"doc_id": doc_id})
+    if existing["ids"]:
+        collection.delete(ids=existing["ids"])
+
     collection.add(
         ids=[f"{doc_id}_{i}" for i in range(len(chunks))],
         embeddings=vectors,
@@ -63,6 +72,35 @@ def ingest_pdf(pdf_path: str, doc_id: str):
         metadatas=[{"doc_id": doc_id, "chunk_index": i} for i in range(len(chunks))],
     )
     print(f"Done. '{doc_id}' is now searchable ({len(chunks)} chunks indexed).")
+
+    return [
+        {"id": f"{doc_id}_{i}", "chunk_index": i, "text": c, "char_count": len(c)}
+        for i, c in enumerate(chunks)
+    ]
+
+
+def list_documents() -> list[dict]:
+    """Return every doc_id currently stored, with how many chunks each has.
+    This is what 'how are they stored' actually looks like under the hood:
+    one flat collection, every chunk tagged with a doc_id in its metadata."""
+    collection = chroma_client.get_or_create_collection(COLLECTION_NAME)
+    all_rows = collection.get(include=["metadatas"])
+    counts: dict[str, int] = {}
+    for meta in all_rows["metadatas"]:
+        counts[meta["doc_id"]] = counts.get(meta["doc_id"], 0) + 1
+    return [{"doc_id": doc_id, "chunk_count": n} for doc_id, n in counts.items()]
+
+
+def get_document_chunks(doc_id: str) -> list[dict]:
+    """Return all stored chunks for one document, in original order —
+    the actual rows sitting in the vector DB right now."""
+    collection = chroma_client.get_or_create_collection(COLLECTION_NAME)
+    rows = collection.get(where={"doc_id": doc_id}, include=["documents", "metadatas"])
+    items = [
+        {"id": id_, "chunk_index": meta["chunk_index"], "text": doc, "char_count": len(doc)}
+        for id_, doc, meta in zip(rows["ids"], rows["documents"], rows["metadatas"])
+    ]
+    return sorted(items, key=lambda c: c["chunk_index"])
 
 
 if __name__ == "__main__":

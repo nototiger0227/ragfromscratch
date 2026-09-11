@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FinRAG — Document Catalog</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@400;600&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --paper: #ECEBE3;
+            --card: #F6F5EF;
+            --ink: #23281F;
+            --ink-soft: #5B5F53;
+            --rule: #CFCABF;
+            --accent: #2B4C7E;
+            --accent-soft: #E4EAF2;
+            --mark: #C98A2C;
+            --mark-soft: #FBF0DD;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--paper);
+            color: var(--ink);
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+            line-height: 1.5;
+        }
+
+        header {
+            padding: 28px 32px 20px;
+            border-bottom: 1px solid var(--rule);
+        }
+
+        header h1 {
+            font-family: 'Roboto Slab', serif;
+            font-weight: 600;
+            font-size: 26px;
+            margin: 0 0 4px;
+        }
+
+        header p {
+            margin: 0;
+            color: var(--ink-soft);
+            font-size: 14px;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 0;
+            min-height: calc(100vh - 90px);
+        }
+
+        .catalog {
+            border-right: 1px solid var(--rule);
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .reading-room {
+            padding: 24px 32px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        section.block {
+            margin-bottom: 28px;
+        }
+
+        h2.label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 12px;
+            letter-spacing: 0.03em;
+            color: var(--ink-soft);
+            margin: 0 0 10px;
+        }
+
+        .field {
+            margin-bottom: 10px;
+        }
+
+        .field label {
+            display: block;
+            font-size: 13px;
+            color: var(--ink-soft);
+            margin-bottom: 4px;
+        }
+
+        input[type=text],
+        input[type=file] {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--rule);
+            background: var(--card);
+            color: var(--ink);
+            border-radius: 3px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        button {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 9px 16px;
+            border-radius: 3px;
+            font-family: 'Inter', sans-serif;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            filter: brightness(1.08);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+
+        button.ghost {
+            background: transparent;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+        }
+
+        .doc-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 10px;
+            border: 1px solid transparent;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .doc-item:hover {
+            background: var(--card);
+        }
+
+        .doc-item.active {
+            background: var(--accent-soft);
+            border-color: var(--accent);
+        }
+
+        .doc-item .count {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 12px;
+            color: var(--ink-soft);
+        }
+
+        .chunk-card {
+            background: var(--card);
+            border: 1px solid var(--rule);
+            border-left: 3px solid var(--rule);
+            border-radius: 3px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .chunk-card:hover {
+            border-left-color: var(--accent);
+        }
+
+        .chunk-card.expanded .preview {
+            -webkit-line-clamp: unset;
+        }
+
+        .chunk-card.evidence {
+            border-left-color: var(--mark);
+            background: var(--mark-soft);
+        }
+
+        .chunk-meta {
+            display: flex;
+            justify-content: space-between;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            color: var(--ink-soft);
+            margin-bottom: 5px;
+        }
+
+        .preview {
+            font-size: 13.5px;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .ask-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .ask-row input {
+            flex: 1;
+        }
+
+        .qa-entry {
+            border-top: 1px solid var(--rule);
+            padding: 18px 0;
+        }
+
+        .qa-entry .q {
+            font-family: 'Roboto Slab', serif;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .qa-entry .a {
+            font-size: 14.5px;
+            white-space: pre-wrap;
+            margin-bottom: 12px;
+        }
+
+        .evidence-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            color: var(--ink-soft);
+            margin-bottom: 6px;
+        }
+
+        .evidence-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .chip {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 11px;
+            background: var(--mark-soft);
+            border: 1px solid var(--mark);
+            color: #6B4A16;
+            padding: 3px 8px;
+            border-radius: 12px;
+        }
+
+        .empty {
+            color: var(--ink-soft);
+            font-size: 13.5px;
+            padding: 12px 0;
+        }
+
+        .status {
+            font-size: 13px;
+            color: var(--ink-soft);
+            margin-top: 8px;
+            min-height: 18px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1>FinRAG — Document Catalog</h1>
+        <p>Upload a report, browse how it was split into chunks, then ask questions and see exactly which chunks
+            answered them.</p>
+    </header>
+
+    <div class="layout">
+        <div class="catalog">
+
+            <section class="block">
+                <h2 class="label">UPLOAD</h2>
+                <div class="field">
+                    <label for="file-input">PDF file</label>
+                    <input type="file" id="file-input" accept="application/pdf">
+                </div>
+                <div class="field">
+                    <label for="docid-input">Document ID (short name, e.g. apple_2024)</label>
+                    <input type="text" id="docid-input" placeholder="apple_2024">
+                </div>
+                <button id="ingest-btn">Ingest & index</button>
+                <div class="status" id="ingest-status"></div>
+            </section>
+
+            <section class="block">
+                <h2 class="label">DOCUMENTS</h2>
+                <div id="doc-list">
+                    <div class="empty">No documents indexed yet.</div>
+                </div>
+            </section>
+
+            <section class="block">
+                <h2 class="label" id="chunk-catalog-label">CHUNK CATALOG</h2>
+                <div id="chunk-list">
+                    <div class="empty">Select a document to see its chunks.</div>
+                </div>
+            </section>
+
+        </div>
+
+        <div class="reading-room">
+            <section class="block">
+                <h2 class="label">ASK</h2>
+                <div class="field">
+                    <label for="scope-select">Scope</label>
+                    <select id="scope-select"
+                        style="width:100%; padding:8px 10px; border:1px solid var(--rule); border-radius:3px; background:var(--card); font-family:inherit; font-size:14px;">
+                        <option value="">All documents</option>
+                    </select>
+                </div>
+                <div class="ask-row">
+                    <input type="text" id="question-input" placeholder="What was total revenue?">
+                    <button id="ask-btn">Ask</button>
+                </div>
+                <div class="status" id="ask-status"></div>
+            </section>
+
+            <div id="qa-log"></div>
+        </div>
+    </div>
+
+    <script>
+        const API = ""; // same origin
+
+        async function refreshDocuments() {
+            const res = await fetch(`${API}/api/documents`);
+            const data = await res.json();
+            const listEl = document.getElementById('doc-list');
+            const scopeEl = document.getElementById('scope-select');
+
+            if (data.documents.length === 0) {
+                listEl.innerHTML = '<div class="empty">No documents indexed yet.</div>';
+                return;
+            }
+
+            listEl.innerHTML = '';
+            scopeEl.innerHTML = '<option value="">All documents</option>';
+
+            data.documents.forEach(doc => {
+                const item = document.createElement('div');
+                item.className = 'doc-item';
+                item.innerHTML = `<span>${doc.doc_id}</span><span class="count">${doc.chunk_count} chunks</span>`;
+                item.onclick = () => loadChunks(doc.doc_id, item);
+                listEl.appendChild(item);
+
+                const opt = document.createElement('option');
+                opt.value = doc.doc_id;
+                opt.textContent = doc.doc_id;
+                scopeEl.appendChild(opt);
+            });
+        }
+
+        async function loadChunks(docId, itemEl) {
+            document.querySelectorAll('.doc-item').forEach(el => el.classList.remove('active'));
+            itemEl.classList.add('active');
+            document.getElementById('chunk-catalog-label').textContent = `CHUNK CATALOG — ${docId}`;
+
+            const res = await fetch(`${API}/api/documents/${docId}/chunks`);
+            const data = await res.json();
+            renderChunks(data.chunks);
+        }
+
+        function renderChunks(chunks) {
+            const listEl = document.getElementById('chunk-list');
+            listEl.innerHTML = '';
+            chunks.forEach(c => {
+                const card = document.createElement('div');
+                card.className = 'chunk-card';
+                card.dataset.chunkId = c.id;
+                card.innerHTML = `
+      <div class="chunk-meta"><span>#${String(c.chunk_index).padStart(2, '0')}</span><span>${c.char_count} chars</span></div>
+      <div class="preview">${escapeHtml(c.text)}</div>
+    `;
+                card.onclick = () => card.classList.toggle('expanded');
+                listEl.appendChild(card);
+            });
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        document.getElementById('ingest-btn').onclick = async () => {
+            const fileInput = document.getElementById('file-input');
+            const docId = document.getElementById('docid-input').value.trim();
+            const statusEl = document.getElementById('ingest-status');
+
+            if (!fileInput.files[0] || !docId) {
+                statusEl.textContent = 'Pick a PDF and give it a document ID first.';
+                return;
+            }
+
+            const btn = document.getElementById('ingest-btn');
+            btn.disabled = true;
+            statusEl.textContent = 'Extracting, chunking, embedding, storing... (calls the Gemini API, can take a minute)';
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('doc_id', docId);
+
+            try {
+                const res = await fetch(`${API}/api/ingest`, { method: 'POST', body: formData });
+                if (!res.ok) throw new Error(await res.text());
+                const data = await res.json();
+                statusEl.textContent = `Indexed ${data.chunk_count} chunks for "${data.doc_id}".`;
+                await refreshDocuments();
+            } catch (err) {
+                statusEl.textContent = `Failed: ${err.message}`;
+            } finally {
+                btn.disabled = false;
+            }
+        };
+
+        document.getElementById('ask-btn').onclick = async () => {
+            const question = document.getElementById('question-input').value.trim();
+            const docId = document.getElementById('scope-select').value;
+            const statusEl = document.getElementById('ask-status');
+            if (!question) return;
+
+            const btn = document.getElementById('ask-btn');
+            btn.disabled = true;
+            statusEl.textContent = 'Retrieving chunks and generating an answer...';
+
+            try {
+                const res = await fetch(`${API}/api/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question, doc_id: docId || null }),
+                });
+                if (!res.ok) throw new Error(await res.text());
+                const data = await res.json();
+                addQaEntry(question, data.answer, data.sources);
+                statusEl.textContent = '';
+                document.getElementById('question-input').value = '';
+            } catch (err) {
+                statusEl.textContent = `Failed: ${err.message}`;
+            } finally {
+                btn.disabled = false;
+            }
+        };
+
+        function addQaEntry(question, answerText, sources) {
+            const log = document.getElementById('qa-log');
+            const entry = document.createElement('div');
+            entry.className = 'qa-entry';
+
+            const chips = sources.map(s =>
+                `<span class="chip" data-chunk-id="${s.chunk_id}">${s.doc_id} #${String(s.chunk_index).padStart(2, '0')}</span>`
+            ).join('');
+
+            entry.innerHTML = `
+    <div class="q">${escapeHtml(question)}</div>
+    <div class="a">${escapeHtml(answerText)}</div>
+    <div class="evidence-label">EVIDENCE USED (${sources.length} chunks)</div>
+    <div class="evidence-chips">${chips}</div>
+  `;
+            log.prepend(entry);
+
+            // If the chunk catalog currently shown includes any of these chunks,
+            // highlight them — this is the "see which cards got pulled" moment.
+            document.querySelectorAll('.chunk-card').forEach(c => c.classList.remove('evidence'));
+            sources.forEach(s => {
+                const card = document.querySelector(`.chunk-card[data-chunk-id="${s.chunk_id}"]`);
+                if (card) card.classList.add('evidence');
+            });
+        }
+
+        refreshDocuments();
+    </script>
+</body>
+
+</html>

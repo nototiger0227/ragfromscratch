@@ -42,7 +42,11 @@ mention which chunk/page it came from if that's indicated in the context.
 """
 
 
-def answer(question: str, doc_id: str | None = None) -> str:
+def ask(question: str, doc_id: str | None = None) -> dict:
+    """Run the full retrieve -> generate pipeline and return BOTH the
+    answer and the exact chunks that were used to produce it. Returning
+    the evidence alongside the answer (rather than just the text) is
+    what makes retrieval debuggable/visible instead of a black box."""
     retrieved = retrieve(question, doc_id=doc_id)
 
     # Build the "augmented" context block that gets inserted into the prompt
@@ -61,7 +65,20 @@ def answer(question: str, doc_id: str | None = None) -> str:
             temperature=0,  # 0 = deterministic, favors sticking to facts over creativity
         ),
     )
-    return response.text
+
+    return {
+        "answer": response.text,
+        "sources": [
+            {"chunk_id": f"{meta['doc_id']}_{meta['chunk_index']}",
+             "doc_id": meta["doc_id"], "chunk_index": meta["chunk_index"], "text": text}
+            for text, meta in retrieved
+        ],
+    }
+
+
+def answer(question: str, doc_id: str | None = None) -> str:
+    """Thin wrapper for the CLI, which just wants the text."""
+    return ask(question, doc_id=doc_id)["answer"]
 
 
 if __name__ == "__main__":
