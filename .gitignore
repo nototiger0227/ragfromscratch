@@ -1,0 +1,13 @@
+# Secrets / environment configuration
+.env
+
+# Python cache / compiled artifacts
+__pycache__/
+*.py[cod]
+
+# Chroma vector store (generated at ingest time)
+chroma_db/
+*.sqlite3
+
+# Large data files (optional, uncomment if you want to ignore PDFs)
+# data/*.pdf
