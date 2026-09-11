@@ -7,7 +7,7 @@ that's a known weakness we'll address in Stage 2 with pymupdf4llm,
 which converts to Markdown and keeps tables intact. For now, plain
 text is enough to learn the pipeline.
 """
-import fitz  # PyMuPDF
+import pymupdf as fitz  # Updated import
 
 
 def extract_text(pdf_path: str) -> str:

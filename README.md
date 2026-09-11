@@ -1,82 +1,78 @@
-# FinRAG — Stage 1: minimal RAG pipeline
+# FinRAG — Stage 1: Minimal RAG Pipeline
 
-A bare-bones but complete RAG pipeline for querying financial PDFs.
-Five files, each doing one clear job:
+A bare‑bones but complete RAG pipeline for querying financial PDFs.
+
+**Project Structure**
 
 | File | Job |
 |---|---|
-| `config.py` | Settings in one place |
-| `extract.py` | PDF → text |
-| `chunk.py` | text → list of chunks |
-| `ingest.py` | chunks → embeddings → Chroma (vector DB) |
-| `query.py` | question → retrieve chunks → ask LLM → answer |
+| `config.py` | Central configuration for models, chunking, and DB paths |
+| `extract.py` | PDF → text extraction |
+| `chunk.py` | Text → list of overlapping character chunks |
+| `ingest.py` | Chunk → embedding → Chroma vector DB (includes dedup on re‑ingest) |
+| `query.py` | Question → retrieve chunks → ask LLM → answer |
+| `app.py` | FastAPI wrapper exposing the above over HTTP |
+| `frontend/` | Dependency‑free HTML/JS UI (served at `/` by FastAPI) |
 
 ## Setup
 
 ```bash
-cd finrag-stage1
+# Clone the repository and change into the project directory
+cd e:/rag/ragfromscratch
+
+# Create a virtual environment (Windows) and activate it
 python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+.venv\\Scripts\\activate
+
+# Install dependencies
 pip install -r requirements.txt
-cp .env.example .env             # Windows: copy .env.example .env
-# then open .env and paste in a free Gemini API key from https://aistudio.google.com/apikey
+
+# Copy the example env file and add your Gemini API key
+cp .env.example .env   # Windows: copy .env.example .env
+# Edit .env and set GOOGLE_API_KEY to a free Gemini API key from https://aistudio.google.com/apikey
 ```
 
-## Run it
+## Run the original CLI tools
 
 ```bash
-# 1. Put a PDF (e.g. a 10-K) in data/, then index it:
+# 1. Index a PDF (place it in the `data/` folder first)
 python ingest.py data/apple_2024.pdf apple_2024
 
-# 2. Ask questions about it:
+# 2. Ask questions interactively
 python query.py
-> What was total revenue?
-> What risks does the company mention around supply chain?
+# > What was total revenue?
+# > What risks does the company mention around supply chain?
 ```
 
-## What to actually read, in order
+## Run the web UI
 
-1. **`extract.py`** — trivial, just confirms "PDF → string" is the whole first step.
-2. **`chunk.py`** — run it standalone (`python chunk.py`) to *see* the overlap
-   happen on a toy string. This is the single easiest-to-misunderstand concept
-   in RAG; watching it on 150 characters before trusting it on a real PDF helps.
-3. **`ingest.py`** — read `embed_texts` and think about what a vector *is*
-   (just a list of floats) before reading how Chroma stores it.
-4. **`query.py`** — read `retrieve()` then `answer()`. Notice retrieval and
-   generation are two totally separate steps — you can test/debug them
-   independently. Try calling `retrieve("your question")` alone in a Python
-   shell and print the chunks it returns *before* trusting what the LLM says
-   about them. This is the #1 debugging move in RAG: when the answer is bad,
-   check retrieval first — 90% of RAG bugs are retrieval bugs, not the LLM's fault.
+```bash
+# Start the FastAPI server (auto‑reload enabled for development)
+python -m uvicorn app:app --reload
 
-## Exercises before moving to Stage 2
+# Open your browser at the following address:
+http://127.0.0.1:8000
+```
 
-Try these — they'll surface the real weaknesses this naive version has:
+The UI provides:
+- **Upload & Index**: Choose a PDF, give it a short `doc_id`, and ingest it.
+- **Document List**: See all indexed documents and their chunk counts.
+- **Chunk Catalog**: Browse each stored chunk as a card (showing index and character count).
+- **Ask Panel**: Submit a question; the answer appears together with the exact chunks used.
+- **Evidence Highlighting**: Chunks that contributed to the answer light up in amber, making retrieval transparent.
 
-- Ask a question whose answer is a specific number (e.g. "what was net
-  income in millions"). Does chunking ever cut the number away from its
-  label? Print the raw retrieved chunks to check.
-- Ask a question using words that don't appear in the document at all
-  (e.g. ask about "profitability" when the doc only says "net income").
-  Does semantic search still find it? This is exactly what vector search
-  is good at that keyword search isn't.
-- Now ask a question with an exact ticker symbol or unusual proper noun.
-  Does it retrieve well? (Often *worse* — this is exactly the gap that
-  BM25/keyword search fills, which is Stage 2.)
-- Try `CHUNK_SIZE = 300` vs `CHUNK_SIZE = 2000` in `config.py`, re-ingest,
-  and compare answer quality. This is the central RAG tuning tradeoff:
-  small chunks = precise but low-context; large chunks = rich context but
-  mushy vectors.
+## Development Notes
 
-## Stage 2 preview (once you've done the exercises)
+- The FastAPI backend in `app.py` is a thin wrapper; it **does not duplicate** any ingestion or query logic.
+- Re‑ingesting a document with the same `doc_id` automatically clears the old chunks to avoid duplication.
+- All data (vector DB, uploaded PDFs) are stored locally under `chroma_db/` and `data/` respectively.
+- For a production deployment you would lock down CORS origins and move the static UI to a CDN.
 
-- Replace character-count chunking with structure-aware chunking
-  (split on headings/paragraphs first).
-- Add BM25 (keyword) retrieval alongside the vector search, and merge
-  the two result sets ("hybrid retrieval").
-- Add a cross-encoder reranker to re-score the merged candidates before
-  picking the final top-k — this is what actually fixes most of the bad
-  retrievals you'll have found in the exercises above.
+## Next Steps (Stage 2)
 
-Ask me when you're ready and we'll build that layer on top of this,
-file by file, the same way.
+When you’re ready to improve the pipeline, consider:
+- Structure‑aware chunking (split on headings/paragraphs).
+- Hybrid retrieval (combine BM25 keyword search with vector search).
+- Cross‑encoder reranking of retrieved chunks.
+
+Feel free to ask me when you want to start building those extensions!
