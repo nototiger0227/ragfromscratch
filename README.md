@@ -12,6 +12,8 @@ This project combines a local vector database, hybrid retrieval, and a FastAPI-b
 - Section-aware chunking with overlap for better retrieval quality
 - Hybrid semantic + lexical retrieval
 - Document-level metadata and source traceability
+- Immediate financial insight extraction for revenue, profit, debt, risks, and outlook
+- Batch ingestion for up to five documents at once
 - FastAPI backend with a simple browser UI
 - Evidence-grounded answer generation using Gemini
 
@@ -248,7 +250,21 @@ curl -X POST "http://localhost:8000/api/ingest" \
 }
 ```
 
-### 2. List all indexed documents
+### 2. Ingest up to five documents
+
+```http
+POST /api/ingest-batch
+```
+
+The endpoint accepts repeated `files` form fields. Optional repeated `doc_ids` fields can override filename-based document IDs. Each indexed document returns chunks and an immediate local financial snapshot grouped into `revenue`, `profit`, `debt`, `risks`, and `outlook`.
+
+```bash
+curl -X POST "http://localhost:8000/api/ingest-batch" \
+  -F "files=@data/report_2024.pdf" \
+  -F "files=@data/report_2023.pdf"
+```
+
+### 3. List all indexed documents
 
 ```http
 GET /api/documents
@@ -264,7 +280,7 @@ GET /api/documents
 }
 ```
 
-### 3. Get chunks for a document
+### 4. Get chunks for a document
 
 ```http
 GET /api/documents/{doc_id}/chunks
@@ -276,7 +292,7 @@ GET /api/documents/{doc_id}/chunks
 curl "http://localhost:8000/api/documents/sample_doc/chunks"
 ```
 
-### 4. Ask a question
+### 5. Ask a question
 
 ```http
 POST /api/query
@@ -322,10 +338,11 @@ curl -X POST "http://localhost:8000/api/query" \
 
 The frontend served from [frontend/index.html](frontend/index.html) includes:
 
-- file upload control
+- multi-file drag-and-drop upload for up to five documents
 - document ID assignment
 - document listing
 - chunk catalog view
+- post-ingestion financial insight cards for revenue, profit, debt, risks, and outlook
 - question input
 - answer panel
 - clickable source evidence chips

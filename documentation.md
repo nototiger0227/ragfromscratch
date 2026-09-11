@@ -142,6 +142,8 @@ The extractor now dispatches based on file extension:
 
 Most real-world document corpora contain mixed file types. Supporting multiple formats increases the practical value of the project and makes it more realistic for portfolio use. It also reduces project brittleness because the indexer no longer depends on a single file format.
 
+The ingestion service also accepts up to five documents in one batch. When indexing completes, it returns an immediate local financial snapshot for each document, grouped into revenue, profit, debt, risks, and outlook signals.
+
 ### Theoretical concept
 
 Document parsing is the first step of any information retrieval pipeline. Without reliable extraction, the downstream chunking and embedding stages are useless. A clean extractor normalizes different source formats into a single plain-text representation, which keeps the rest of the pipeline consistent.
@@ -345,7 +347,35 @@ Response:
 }
 ```
 
-#### 2. List indexed documents
+#### 2. Batch ingest up to five documents
+
+```http
+POST /api/ingest-batch
+```
+
+The endpoint accepts repeated `files` fields and optional repeated `doc_ids` fields. Missing IDs default to the uploaded filename stem. The response includes per-document chunks plus a deterministic financial insight summary, so the UI can render a structured snapshot immediately after indexing without making a second LLM call.
+
+```json
+{
+  "document_count": 2,
+  "chunk_count": 34,
+  "documents": [
+    {
+      "doc_id": "report_2024",
+      "chunk_count": 18,
+      "insights": {
+        "revenue": ["Revenue increased to $20M."],
+        "profit": ["Net income was $4M."],
+        "debt": ["Total debt was $8M."],
+        "risks": ["Key risks include supply chain disruption."],
+        "outlook": ["The outlook expects steady growth."]
+      }
+    }
+  ]
+}
+```
+
+#### 3. List indexed documents
 
 ```http
 GET /api/documents
@@ -361,13 +391,13 @@ Response:
 }
 ```
 
-#### 3. Get chunks for a specific document
+#### 4. Get chunks for a specific document
 
 ```http
 GET /api/documents/{doc_id}/chunks
 ```
 
-#### 4. Ask a question
+#### 5. Ask a question
 
 ```http
 POST /api/query
@@ -404,9 +434,10 @@ Example response:
 
 The frontend includes:
 
-- file upload interface
+- multi-file drag-and-drop upload for up to five documents
 - document list panel
 - chunk catalog browsing
+- immediate structured financial insight cards after ingestion
 - query input
 - evidence chips showing the retrieved chunks used to answer
 - clickable chunk highlighting to quickly inspect evidence

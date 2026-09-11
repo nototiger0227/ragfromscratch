@@ -4,6 +4,7 @@ from docx import Document
 
 from chunk import chunk_text
 from extract import extract_text
+from insights import extract_financial_insights
 from query import bm25_rank
 
 
@@ -51,3 +52,18 @@ def test_bm25_rank_prefers_exact_keyword_match():
 
     assert ranked[0]["text"] == docs[0]
     assert ranked[0]["score"] >= ranked[1]["score"]
+
+
+def test_extract_financial_insights_groups_key_signals():
+    text = (
+        "Revenue increased to $20M. Net income was $4M. Total debt was $8M.\n"
+        "Key risks include supply chain disruption. The outlook expects steady growth."
+    )
+
+    result = extract_financial_insights(text)
+
+    assert any("Revenue increased" in item for item in result["revenue"])
+    assert any("Net income" in item for item in result["profit"])
+    assert any("Total debt" in item for item in result["debt"])
+    assert any("Key risks" in item for item in result["risks"])
+    assert any("outlook" in item.lower() for item in result["outlook"])

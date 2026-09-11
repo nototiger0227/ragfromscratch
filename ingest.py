@@ -12,6 +12,7 @@ from config import (
     GOOGLE_API_KEY,
 )
 from extract import extract_text
+from insights import extract_financial_insights
 
 client = genai.Client(api_key=GOOGLE_API_KEY) if GOOGLE_API_KEY else None
 chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
@@ -74,10 +75,16 @@ def ingest_document(file_path: str, doc_id: str):
     )
     print(f"Done. '{doc_id}' is now searchable ({len(chunks)} chunks indexed).")
 
-    return [
+    result = [
         {"id": f"{doc_id}_{i}", "chunk_index": i, "text": chunk, "char_count": len(chunk)}
         for i, chunk in enumerate(chunks)
     ]
+    return result
+
+
+def summarize_document(file_path: str) -> dict[str, list[str]]:
+    """Extract financial signals from a document before or alongside indexing."""
+    return extract_financial_insights(extract_text(file_path))
 
 
 def ingest_pdf(pdf_path: str, doc_id: str):

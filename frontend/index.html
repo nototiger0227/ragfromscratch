@@ -63,6 +63,18 @@
         .status { min-height: 20px; margin-top: 10px; color: var(--muted); font-size: 12px; }
         .status.error { color: #b44332; }
         .status.success { color: var(--teal-dark); }
+        .insight-panel { display: none; margin-top: 18px; padding: 20px; }
+        .insight-panel.visible { display: block; }
+        .insight-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+        .insight-heading p { margin: 3px 0 0; }
+        .insight-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 9px; }
+        .insight-card { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #fbfcfa; }
+        .insight-card h4 { margin: 0 0 8px; color: var(--teal-dark); font: 600 11px "DM Mono", monospace; letter-spacing: .07em; text-transform: uppercase; }
+        .insight-card ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+        .insight-card li { color: var(--ink); font-size: 12px; line-height: 1.4; }
+        .insight-card li::before { content: ""; display: inline-block; width: 5px; height: 5px; margin: 0 7px 2px 0; border-radius: 50%; background: var(--coral); }
+        .insight-empty { color: var(--muted) !important; }
+        .insight-empty::before { display: none !important; }
         .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 26px 0 10px; }
         .section-heading h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .09em; }
         .count { color: var(--muted); font: 11px "DM Mono", monospace; }
@@ -112,8 +124,8 @@
         .chunk-meta { display: flex; justify-content: space-between; margin-bottom: 6px; color: var(--muted); font: 10px "DM Mono", monospace; }
         .preview { display: -webkit-box; overflow: hidden; font-size: 12px; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
         .chunk-card.expanded .preview { display: block; }
-        @media (max-width: 1180px) { .dashboard { grid-template-columns: 280px minmax(0, 1fr); } .evidence-panel { grid-column: 1 / -1; min-height: auto; } .chunk-list { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 300px; } }
-        @media (max-width: 760px) { .shell { padding: 18px 14px 30px; } .topbar, .hero, .ask-heading { align-items: flex-start; flex-direction: column; } .system-pill { align-self: flex-start; } .dashboard { display: flex; flex-direction: column; } .sidebar, .evidence-panel { width: 100%; min-height: auto; } .stat-strip { width: 100%; } .stat { flex: 1; } .ask-row { flex-direction: column; } .ask-row button { min-height: 44px; } .scope { width: 100%; } .chunk-list { grid-template-columns: 1fr; max-height: 420px; } }
+        @media (max-width: 1180px) { .dashboard { grid-template-columns: 280px minmax(0, 1fr); } .evidence-panel { grid-column: 1 / -1; min-height: auto; } .chunk-list { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 300px; } .insight-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+        @media (max-width: 760px) { .shell { padding: 18px 14px 30px; } .topbar, .hero, .ask-heading, .insight-heading { align-items: flex-start; flex-direction: column; } .system-pill { align-self: flex-start; } .dashboard { display: flex; flex-direction: column; } .sidebar, .evidence-panel { width: 100%; min-height: auto; } .stat-strip { width: 100%; } .stat { flex: 1; } .ask-row { flex-direction: column; } .ask-row button { min-height: 44px; } .scope { width: 100%; } .chunk-list { grid-template-columns: 1fr; max-height: 420px; } .insight-grid { grid-template-columns: 1fr; width: 100%; } }
     </style>
 </head>
 
@@ -126,8 +138,8 @@
         <div class="dashboard">
             <aside class="panel sidebar">
                 <p class="eyebrow">01 / Build your index</p><h3>Bring in a document</h3>
-                <label class="upload-zone" id="upload-zone" for="file-input"><strong id="file-name">Drop a file here</strong><span>PDF, DOCX, or TXT · click to browse</span><input type="file" id="file-input" accept=".pdf,.docx,.txt,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label>
-                <div class="field"><label for="docid-input">Document ID</label><input type="text" id="docid-input" placeholder="e.g. annual_report_2024"></div>
+                <label class="upload-zone" id="upload-zone" for="file-input"><strong id="file-name">Drop up to 5 files here</strong><span>PDF, DOCX, or TXT · click to browse</span><input type="file" id="file-input" multiple accept=".pdf,.docx,.txt,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label>
+                <div class="field"><label for="docid-input">Optional document IDs</label><input type="text" id="docid-input" placeholder="Auto-uses filenames for batch uploads"></div>
                 <button class="primary-button" id="ingest-btn">Ingest and index</button><div class="status" id="ingest-status" aria-live="polite"></div>
                 <div class="section-heading"><h3>Indexed documents</h3><span class="count" id="document-count">0</span></div>
                 <div class="doc-list" id="doc-list"><div class="empty">Your indexed documents will appear here.</div></div>
@@ -135,6 +147,7 @@
             <section class="workspace">
                 <div class="hero"><div class="hero-copy"><p class="eyebrow">02 / Ask grounded questions</p><h2>Find the signal in your documents.</h2><p>Ask in plain language. FinRAG retrieves supporting passages and keeps the evidence close to the answer.</p></div><div class="stat-strip"><div class="stat"><strong id="doc-stat">0</strong><span>documents</span></div><div class="stat"><strong id="chunk-stat">0</strong><span>chunks indexed</span></div></div></div>
                 <div class="panel ask-panel"><div class="ask-heading"><div><h3>Ask the collection</h3><p class="muted">Choose a scope or search across every indexed document.</p></div><div class="scope"><label class="muted" for="scope-select">Scope</label><select id="scope-select"><option value="">All documents</option></select></div></div><div class="ask-row"><input type="text" id="question-input" placeholder="What were the key risks mentioned?" autocomplete="off"><button id="ask-btn">Ask FinRAG</button></div><div class="suggestions"><button class="suggestion" data-question="What was the total revenue?">Total revenue</button><button class="suggestion" data-question="What were the key risks?">Key risks</button><button class="suggestion" data-question="What is the company strategy?">Company strategy</button></div><div class="status" id="ask-status" aria-live="polite"></div></div>
+                <section class="panel insight-panel" id="insight-panel"><div class="insight-heading"><div><p class="eyebrow">Post-ingestion snapshot</p><h3>Financial signals found</h3><p class="muted">Extracted locally from the newly indexed text. Use Ask FinRAG for deeper reasoning.</p></div><span class="count" id="insight-doc-count"></span></div><div class="insight-grid" id="insight-grid"></div></section>
                 <div id="qa-log"><div class="welcome"><strong>Your answer history will appear here.</strong>Index a document, then ask a question to see grounded answers and clickable evidence.</div></div>
             </section>
             <aside class="panel evidence-panel"><div class="panel-title"><div><p class="eyebrow">03 / Inspect evidence</p><h3>Chunk catalog</h3></div><span class="selected-doc" id="selected-doc">No document selected</span></div><div class="chunk-list" id="chunk-list"><div class="empty">Select a document to inspect its chunks.</div></div></aside>
@@ -174,14 +187,32 @@
             entry.innerHTML = `<div class="question-label">Question</div><div class="question">${escapeHtml(question)}</div><div class="answer">${escapeHtml(answer)}</div><div class="evidence-label">Evidence used · ${(sources || []).length} chunks</div><div class="evidence-chips">${chips || '<span class="muted">No source chunks returned.</span>'}</div>`; log.prepend(entry);
             (sources || []).forEach((source) => selectChunkById(source.chunk_id)); entry.querySelectorAll(".chip").forEach((chip) => chip.addEventListener("click", () => selectChunkById(chip.dataset.chunkId)));
         }
-        $("file-input").addEventListener("change", (event) => { const file = event.target.files[0]; if (file) $("file-name").textContent = file.name; });
+        function renderInsights(documents) {
+            const labels = { revenue: "Revenue", profit: "Profit", debt: "Debt", risks: "Risks", outlook: "Outlook" };
+            const merged = Object.fromEntries(Object.keys(labels).map((key) => [key, []]));
+            documents.forEach((document) => Object.entries(document.insights || {}).forEach(([key, values]) => {
+                values.forEach((value) => merged[key].push(`${document.doc_id}: ${value}`));
+            }));
+            $("insight-doc-count").textContent = `${documents.length} document${documents.length === 1 ? "" : "s"}`;
+            $("insight-grid").innerHTML = Object.entries(labels).map(([key, label]) => {
+                const values = merged[key].slice(0, 5);
+                return `<article class="insight-card"><h4>${label}</h4><ul>${values.length ? values.map((value) => `<li>${escapeHtml(value)}</li>`).join("") : '<li class="insight-empty">No signal found</li>'}</ul></article>`;
+            }).join("");
+            $("insight-panel").classList.add("visible");
+        }
+
+        $("file-input").addEventListener("change", (event) => { const files = [...event.target.files]; if (files.length) $("file-name").textContent = `${files.length} file${files.length === 1 ? "" : "s"} selected`; });
         ["dragenter", "dragover"].forEach((eventName) => $("upload-zone").addEventListener(eventName, (event) => { event.preventDefault(); $("upload-zone").classList.add("dragging"); }));
         ["dragleave", "drop"].forEach((eventName) => $("upload-zone").addEventListener(eventName, (event) => { event.preventDefault(); $("upload-zone").classList.remove("dragging"); }));
-        $("upload-zone").addEventListener("drop", (event) => { const file = event.dataTransfer.files[0]; if (file) { $("file-input").files = event.dataTransfer.files; $("file-name").textContent = file.name; } });
+        $("upload-zone").addEventListener("drop", (event) => { const files = [...event.dataTransfer.files].slice(0, 5); if (files.length) { $("file-input").files = event.dataTransfer.files; $("file-name").textContent = `${files.length} file${files.length === 1 ? "" : "s"} selected`; } });
         $("ingest-btn").addEventListener("click", async () => {
-            const file = $("file-input").files[0]; const docId = $("docid-input").value.trim(); if (!file || !docId) { setStatus("ingest-status", "Choose a file and add a document ID first.", "error"); return; }
-            const button = $("ingest-btn"); button.disabled = true; setStatus("ingest-status", "Extracting, chunking, embedding, and indexing..."); const formData = new FormData(); formData.append("file", file); formData.append("doc_id", docId);
-            try { const response = await fetch(`${API}/api/ingest`, { method: "POST", body: formData }); if (!response.ok) throw new Error(await readError(response)); const data = await response.json(); setStatus("ingest-status", `Indexed ${data.chunk_count} chunks for ${data.doc_id}.`, "success"); await refreshDocuments(); } catch (error) { setStatus("ingest-status", error.message, "error"); } finally { button.disabled = false; }
+            const files = [...$("file-input").files]; const suppliedId = $("docid-input").value.trim();
+            if (!files.length) { setStatus("ingest-status", "Choose at least one document first.", "error"); return; }
+            if (files.length > 5) { setStatus("ingest-status", "Upload up to five documents at a time.", "error"); return; }
+            const button = $("ingest-btn"); button.disabled = true; setStatus("ingest-status", `Indexing ${files.length} document${files.length === 1 ? "" : "s"}...`);
+            const formData = new FormData(); files.forEach((file) => formData.append("files", file));
+            if (suppliedId) suppliedId.split(",").map((id) => id.trim()).filter(Boolean).forEach((id) => formData.append("doc_ids", id));
+            try { const response = await fetch(`${API}/api/ingest-batch`, { method: "POST", body: formData }); if (!response.ok) throw new Error(await readError(response)); const data = await response.json(); renderInsights(data.documents || []); setStatus("ingest-status", `Indexed ${data.document_count} documents and ${data.chunk_count} chunks.`, "success"); await refreshDocuments(); } catch (error) { setStatus("ingest-status", error.message, "error"); } finally { button.disabled = false; }
         });
         async function askQuestion() {
             const question = $("question-input").value.trim(); if (!question) return; const button = $("ask-btn"); button.disabled = true; setStatus("ask-status", "Searching evidence and drafting an answer...");
