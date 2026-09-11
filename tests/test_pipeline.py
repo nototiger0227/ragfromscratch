@@ -4,6 +4,7 @@ from docx import Document
 
 from chunk import chunk_text
 from extract import extract_text
+from query import bm25_rank
 
 
 def test_extract_text_handles_txt(tmp_path):
@@ -38,3 +39,15 @@ def test_chunk_text_keeps_headings_and_respects_overlap():
     assert any("Revenue" in chunk for chunk in chunks)
     assert any("Risk" in chunk for chunk in chunks)
     assert all(len(chunk) <= 80 for chunk in chunks)
+
+
+def test_bm25_rank_prefers_exact_keyword_match():
+    docs = [
+        "The company reported revenue growth of 12 percent.",
+        "Supply chain risk remains a key concern for operations.",
+    ]
+
+    ranked = bm25_rank("revenue growth", docs)
+
+    assert ranked[0]["text"] == docs[0]
+    assert ranked[0]["score"] >= ranked[1]["score"]

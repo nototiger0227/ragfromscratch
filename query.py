@@ -9,21 +9,80 @@ from google.genai import types
 from config import CHAT_MODEL, CHROMA_DIR, COLLECTION_NAME, GOOGLE_API_KEY, TOP_K
 from ingest import embed_texts
 
-client = genai.Client(api_key=GOOGLE_API_KEY)
+client = genai.Client(api_key=GOOGLE_API_KEY) if GOOGLE_API_KEY else None
 chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
+
+
+def get_genai_client():
+    """Create the Gemini client only when a valid API key exists."""
+    if not GOOGLE_API_KEY:
+        raise ValueError(
+            "GOOGLE_API_KEY is missing. Add it to your .env file before running ingest or query."
+        )
+    if client is None:
+        return genai.Client(api_key=GOOGLE_API_KEY)
+    return client
+
+
+def tokenize(text: str) -> list[str]:
+    return re.findall(r"\b\w+\b", text.lower())
+
+
+def bm25_rank(question: str, documents: list[str], top_k: int | None = None) -> list[dict]:
+    """Compute a lightweight BM25 score for lexical retrieval candidates."""
+    if not documents:
+        return []
+
+    q_tokens = tokenize(question)
+    if not q_tokens:
+        return [{"text": doc, "score": 0.0} for doc in documents[: top_k or len(documents)]]
+
+    doc_tokens = [tokenize(doc) for doc in documents]
+    docs_with_terms = [set(tokens) for tokens in doc_tokens]
+    n_docs = len(documents)
+    avgdl = sum(len(tokens) for tokens in doc_tokens) / n_docs
+    k1 = 1.5
+    b = 0.75
+
+    def idf(term: str) -> float:
+        df = sum(1 for doc_terms in docs_with_terms if term in doc_terms)
+        return max(0.0, (n_docs - df + 0.5) / (df + 0.5))
+
+    scores: list[float] = []
+    for tokens in doc_tokens:
+        score = 0.0
+        term_counts = {}
+        for token in tokens:
+            term_counts[token] = term_counts.get(token, 0) + 1
+        for token in q_tokens:
+            if token not in term_counts:
+                continue
+            tf = term_counts[token]
+            denom = tf + k1 * (1 - b + b * (len(tokens) / avgdl if avgdl else 1.0))
+            score += idf(token) * ((tf * (k1 + 1)) / denom)
+        scores.append(score)
+
+    ranked = [
+        {"text": doc, "score": round(score, 6)}
+        for doc, score in zip(documents, scores)
+    ]
+    ranked.sort(key=lambda item: item["score"], reverse=True)
+    if top_k is not None:
+        return ranked[:top_k]
+    return ranked
 
 
 def lexical_overlap_score(question: str, text: str) -> float:
     """Simple keyword-overlap score used to rerank the dense retrieval candidates."""
-    question_tokens = set(re.findall(r"\b\w+\b", question.lower()))
-    text_tokens = set(re.findall(r"\b\w+\b", text.lower()))
+    question_tokens = set(tokenize(question))
+    text_tokens = set(tokenize(text))
     if not question_tokens:
         return 0.0
     return len(question_tokens & text_tokens) / len(question_tokens)
 
 
 def retrieve(question: str, doc_id: str | None = None, top_k: int = TOP_K):
-    """Hybrid retrieval: dense semantic search + lightweight lexical reranking."""
+    """Hybrid retrieval: dense semantic search + lexical BM25 reranking."""
     collection = chroma_client.get_or_create_collection(COLLECTION_NAME)
     [question_vector] = embed_texts([question])
 
@@ -41,15 +100,28 @@ def retrieve(question: str, doc_id: str | None = None, top_k: int = TOP_K):
     metas = results["metadatas"][0]
     distances = results.get("distances", [[0.0] * len(docs)])[0]
 
-    reranked = []
+    dense_candidates = []
     for text, meta, distance in zip(docs, metas, distances):
         lexical_score = lexical_overlap_score(question, text)
         semantic_score = 1.0 / (1.0 + distance) if distance is not None else 0.0
-        combined_score = (0.65 * semantic_score) + (0.35 * lexical_score)
-        reranked.append((combined_score, text, meta))
+        dense_candidates.append({
+            "text": text,
+            "meta": meta,
+            "dense_score": 0.65 * semantic_score + 0.35 * lexical_score,
+        })
 
-    reranked.sort(key=lambda item: item[0], reverse=True)
-    return [(text, meta) for _, text, meta in reranked[:top_k]]
+    bm25_candidates = bm25_rank(question, [item["text"] for item in dense_candidates], top_k=len(dense_candidates))
+    bm25_by_text = {item["text"]: item["score"] for item in bm25_candidates}
+
+    hybrid = []
+    for item in dense_candidates:
+        text = item["text"]
+        bm25_score = bm25_by_text.get(text, 0.0)
+        combined_score = item["dense_score"] + (0.5 * bm25_score)
+        hybrid.append((combined_score, text, item["meta"]))
+
+    hybrid.sort(key=lambda item: item[0], reverse=True)
+    return [(text, meta) for _, text, meta in hybrid[:top_k]]
 
 
 SYSTEM_PROMPT = """You are a financial document analysis assistant.
@@ -71,7 +143,7 @@ def ask(question: str, doc_id: str | None = None) -> dict:
 
     user_prompt = f"CONTEXT:\n{context_block}\n\nQUESTION:\n{question}"
 
-    response = client.models.generate_content(
+    response = get_genai_client().models.generate_content(
         model=CHAT_MODEL,
         contents=user_prompt,
         config=types.GenerateContentConfig(

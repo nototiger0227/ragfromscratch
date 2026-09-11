@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import FastAPI, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from ingest import ingest_document, list_documents, get_document_chunks
@@ -34,13 +34,22 @@ DATA_DIR.mkdir(exist_ok=True)
 @app.post("/api/ingest")
 async def api_ingest(file: UploadFile, doc_id: str = Form(...)):
     """Save the uploaded document, run it through the pipeline, and return the created chunks."""
-    safe_name = file.filename or "uploaded_file"
-    file_path = DATA_DIR / safe_name
-    with file_path.open("wb") as f:
-        shutil.copyfileobj(file.file, f)
+    try:
+        safe_name = file.filename or "uploaded_file"
+        file_path = DATA_DIR / safe_name
+        with file_path.open("wb") as f:
+            shutil.copyfileobj(file.file, f)
 
-    chunks = ingest_document(str(file_path), doc_id)
-    return {"doc_id": doc_id, "chunk_count": len(chunks), "chunks": chunks}
+        chunks = ingest_document(str(file_path), doc_id)
+        return {"doc_id": doc_id, "chunk_count": len(chunks), "chunks": chunks}
+    except Exception as exc:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Document ingestion failed.",
+                "error": str(exc),
+            },
+        )
 
 
 @app.get("/api/documents")
@@ -60,7 +69,16 @@ class QuestionRequest(BaseModel):
 
 @app.post("/api/query")
 async def api_query(req: QuestionRequest):
-    return ask(req.question, doc_id=req.doc_id)
+    try:
+        return ask(req.question, doc_id=req.doc_id)
+    except Exception as exc:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Query failed.",
+                "error": str(exc),
+            },
+        )
 
 
 # Serve the frontend itself. Because it's served from the same FastAPI

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()  # reads a .env file in this folder into environment variables
 
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or ""
 
 # Which Gemini models we use, and why:
 EMBEDDING_MODEL = "models/gemini-embedding-001"  # current embedding model, free tier

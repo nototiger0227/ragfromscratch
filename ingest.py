@@ -13,15 +13,26 @@ from config import (
 )
 from extract import extract_text
 
-client = genai.Client(api_key=GOOGLE_API_KEY)
+client = genai.Client(api_key=GOOGLE_API_KEY) if GOOGLE_API_KEY else None
 chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
+
+
+def get_genai_client():
+    """Create the Gemini client only when a valid API key exists."""
+    if not GOOGLE_API_KEY:
+        raise ValueError(
+            "GOOGLE_API_KEY is missing. Add it to your .env file before running ingest or query."
+        )
+    if client is None:
+        return genai.Client(api_key=GOOGLE_API_KEY)
+    return client
 
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
     """Embed a batch of texts with the configured Gemini embedding model."""
     if not texts:
         return []
-    result = client.models.embed_content(model=EMBEDDING_MODEL, contents=texts)
+    result = get_genai_client().models.embed_content(model=EMBEDDING_MODEL, contents=texts)
     return [e.values for e in result.embeddings]
 
 
